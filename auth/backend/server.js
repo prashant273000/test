@@ -129,8 +129,6 @@ async function crawl(input) {
         console.error(err);
     }
 }
-const http = require("http");
-const { Server } = require("socket.io");
 const app = express();
 
 console.log("MONGO_URI", process.env.MONGO_URI)
@@ -138,30 +136,37 @@ const connectDB = require("./config/db");
 connectDB();
 
 // Firebase Admin Setup
-const serviceAccount = require("./serviceAccountKey.json");
+// Support both environment variable and local file for Firebase credentials
+let firebaseConfig;
+if (process.env.FIREBASE_CREDENTIALS) {
+  // Parse from environment variable (for production like Render)
+  firebaseConfig = JSON.parse(process.env.FIREBASE_CREDENTIALS.replace(/\\n/g, '\n'));
+} else {
+  // Load from local file (for development)
+  firebaseConfig = require("./serviceAccountKey.json");
+}
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert(firebaseConfig),
 });
 
-const FRONTEND_ORIGINS = [
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-];
-
-// Middleware
-app.use(
-  cors({
-    origin: FRONTEND_ORIGINS,
-    credentials: true,
-  })
-);
+// Middleware - CORS configuration for production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production'
+    ? [process.env.FRONTEND_URL || '*', 'http://localhost:5173', 'http://localhost:3000']
+    : '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/voice", require("./routes/voice"));
-app.use("/chat", require("./routes/chat"));
+app.use("/api/friends", require("./routes/friends"));
+app.use("/api/match", require("./routes/match"));
 // Test route (optional)
 app.get("/", (req, res) => {
   res.send("Backend running ✅");
@@ -197,18 +202,8 @@ app.post("/api/content", async (req, res) => {
     });
   }
 });
-const PORT = 5000;
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: FRONTEND_ORIGINS,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
-
-require("./socket/chatSocket")(io);
-
-server.listen(PORT, () => {
-  console.log(`🚀 Server + Socket.io on http://localhost:${PORT}`);
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });

@@ -1,3 +1,4 @@
+import FriendRequestToast from "./FriendRequestToast";
 import { useState, useEffect, useContext, useRef } from "react"; 
 import { Link } from "react-router-dom"; 
 import { navLinks } from "../constants";
@@ -5,11 +6,13 @@ import { AuthContext } from "../context/AuthContext";
 import { logout } from "../services/auth";
 import { syncUser } from "../services/chatService";
 import { HiOutlineUserAdd } from "react-icons/hi";
+import { useNavigate } from "react-router-dom";
+
 
 const NavBar = () => {
   const [scrolled, setScrolled] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  
+  const navigate = useNavigate();
   // Modal States
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -19,6 +22,9 @@ const NavBar = () => {
   const [friendSearchQuery, setFriendSearchQuery] = useState("");
   const [isSearchingFriend, setIsSearchingFriend] = useState(false);
   const [friendSearchResult, setFriendSearchResult] = useState(null);
+  const [incomingRequests, setIncomingRequests] = useState([]);
+  const [friends, setFriends] = useState([]);
+
 
   // User & Chat States
   const [dbUser, setDbUser] = useState(null); 
@@ -26,7 +32,7 @@ const NavBar = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false);
   
-  // Refs (From Second Navbar)
+  // Refs
   const chatScrollRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -40,12 +46,7 @@ const NavBar = () => {
   const { user } = useContext(AuthContext);
 
   // --- MOCK FRIENDS LIST FOR PROFILE ---
-  const mockFriends = [
-    { name: "AlexChen_99", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex" },
-    { name: "SarahDev", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah" },
-    { name: "CodeNinja", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ninja" },
-    { name: "ByteKing", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Byte" }
-  ];
+  
 
   // Global Text Selection Listener
   useEffect(() => {
@@ -117,6 +118,41 @@ const NavBar = () => {
     };
     fetchUserFromBackend();
   }, [user]); 
+  useEffect(() => {
+  const fetchFriends = async () => {
+    if (!dbUser?.uid) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/friends/list/${dbUser.uid}`);
+      const data = await res.json();
+      if (res.ok) {
+        setFriends(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch friends:", err);
+    }
+  };
+
+  fetchFriends();
+}, [dbUser]);
+
+  useEffect(() => {
+  const fetchRequests = async () => {
+    if (!dbUser?.uid) return;
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/friends/requests/${dbUser.uid}`);
+      const data = await res.json();
+      if (res.ok) {
+        setIncomingRequests(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch requests:", err);
+    }
+  };
+
+  fetchRequests();
+}, [dbUser]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -138,7 +174,7 @@ const NavBar = () => {
   };
 
   // =========================================
-  // --- REAL BACKEND LOGIC (From Second Navbar) ---
+  // --- REAL BACKEND LOGIC ---
   // =========================================
   const sendAudioToBackend = async (audioBlob) => {
     const formData = new FormData();
@@ -283,33 +319,149 @@ const NavBar = () => {
   // --- END REAL BACKEND LOGIC ---
   // =========================================
 
-  const handleSearchFriend = (e) => {
-    e.preventDefault();
-    if (!friendSearchQuery.trim()) return;
-    setIsSearchingFriend(true);
-    setFriendSearchResult(null);
-    setTimeout(() => {
-      if (friendSearchQuery.trim().toLowerCase() === "alexchen_99") {
-        setFriendSearchResult({
-          id: "12345",
-          name: "AlexChen_99",
-          rank: "Diamond Tier",
-          league: "Champion's League",
-          photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Alex",
-        });
-      } else {
-        setFriendSearchResult("not_found");
-      }
-      setIsSearchingFriend(false);
-    }, 1200);
-  };
+  const handleSearchFriend = async (e) => {
+  e.preventDefault();
+  if (!friendSearchQuery.trim() || !dbUser?.uid) return;
 
-  const handleSendRequest = () => {
+  setIsSearchingFriend(true);
+  setFriendSearchResult(null);
+
+  try {
+    const res = await fetch(
+      `http://localhost:5000/api/friends/search?q=${encodeURIComponent(friendSearchQuery)}&currentUid=${dbUser.uid}`
+    );
+
+    const data = await res.json();
+
+    if (Array.isArray(data) && data.length > 0) {
+      const first = data[0];
+      setFriendSearchResult({
+        id: first._id,
+        uid: first.uid,
+        name: first.name,
+        rank: "Diamond Tier",
+        league: "Champion's League",
+        photoURL: first.picture,
+      });
+    } else {
+      setFriendSearchResult("not_found");
+    }
+  } catch (err) {
+    console.error("Friend search failed:", err);
+    setFriendSearchResult("not_found");
+  } finally {
+    setIsSearchingFriend(false);
+  }
+};
+  const handleSendRequest = async () => {
+  if (!dbUser?.uid || !friendSearchResult?.uid) return;
+
+  try {
+    const res = await fetch("http://localhost:5000/api/friends/request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        senderUid: dbUser.uid,
+        receiverUid: friendSearchResult.uid,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to send friend request");
+    }
+
     alert(`Friend request sent to ${friendSearchResult.name}!`);
     setIsAddFriendOpen(false);
     setFriendSearchQuery("");
     setFriendSearchResult(null);
-  };
+  } catch (err) {
+    console.error("Send request failed:", err);
+    alert(err.message);
+  }
+};
+
+  const handleAcceptRequest = async (requestId) => {
+  try {
+    const res = await fetch("http://localhost:5000/api/friends/accept", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ requestId }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to accept request");
+    }
+
+    setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+
+    const friendsRes = await fetch(`http://localhost:5000/api/friends/list/${dbUser.uid}`);
+    const friendsData = await friendsRes.json();
+    if (friendsRes.ok) {
+      setFriends(friendsData);
+    }
+  } catch (err) {
+    console.error("Accept request failed:", err);
+    alert(err.message);
+  }
+};
+const handleDeclineRequest = async (requestId) => {
+  try {
+    const res = await fetch("http://localhost:5000/api/friends/decline", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ requestId }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to decline request");
+    }
+
+    setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+  } catch (err) {
+    console.error("Decline request failed:", err);
+    alert(err.message);
+  }
+};
+
+  const handleAcceptMatchInvite = async (matchId) => {
+  try {
+    const res = await fetch("http://localhost:5000/api/match/accept-invite", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        matchId,
+        uid: dbUser.uid,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to accept invite");
+    }
+
+    // 🚀 THIS IS THE IMPORTANT LINE
+    navigate(`/battle/${data.roomId}`);
+
+  } catch (err) {
+    console.error("Match accept failed:", err);
+    alert(err.message);
+  }
+};
 
   const displayUser = dbUser
     ? {
@@ -324,6 +476,10 @@ const NavBar = () => {
         docsRead: 0, battlesWon: 0, battlesLost: 0,
       }
     : null;
+
+    console.log("user:", user);
+    console.log("dbUser:", dbUser);
+    console.log("friendSearchQuery:", friendSearchQuery);
 
   return (
     <>
@@ -345,14 +501,19 @@ const NavBar = () => {
         </div>
       )}
 
-      {/* NAVBAR */}
-      <header className={`navbar relative ${scrolled ? "scrolled" : "not-scrolled"}`}>
+      {/* NAVBAR: FIXED 'relative' CLASS ISSUE HERE */}
+      <header className={`navbar ${scrolled ? "scrolled" : "not-scrolled"}`}>
         <div className="inner w-full flex items-center justify-between px-4 md:px-8">
-          <Link to="/" className="logo flex items-center gap-3 transition-transform hover:scale-105 shrink-0">
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-gray-200 flex items-center justify-center bg-white shadow-md">
+          <Link to="/" className="logo flex items-center gap-3 transition-all hover:scale-105 shrink-0 group">
+            {/* Enhanced Image Wrapper with Hover Effect */}
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-purple-200 group-hover:border-pink-400 flex items-center justify-center bg-white shadow-md transition-colors duration-300">
               <img src="/images/web_logo.jpeg" alt="Logo" className="w-full h-full object-cover" />
             </div>
-            <span className="hidden lg:inline text-black font-extrabold text-xl md:text-2xl [text-shadow:0_2px_8px_#9333ea] tracking-tight">Coder_Syndicate</span>
+            
+            {/* Heavier, Punchier Gradient Text */}
+            <span className="hidden lg:inline font-black text-2xl md:text-3xl uppercase tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-purple-700 via-pink-500 to-indigo-600 drop-shadow-md">
+              Coder_Syndicate
+            </span>
           </Link>
 
           <nav className="hidden md:flex items-center">
@@ -576,11 +737,11 @@ const NavBar = () => {
                 <h4 className="text-lg md:text-xl font-black text-gray-900 flex items-center gap-2">
                   <span>🤝</span> Your Syndicate
                 </h4>
-                <span className="text-xs md:text-sm font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full">{mockFriends.length} Friends</span>
+                <span className="text-xs md:text-sm font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded-full">{friends.length} Friends</span>
               </div>
               
               <div className="flex gap-4 md:gap-6 overflow-x-auto pb-4 custom-scrollbar">
-                {mockFriends.map((friend, idx) => (
+                {friends.map((friend, idx) => (
                   <div key={idx} className="flex flex-col items-center gap-2 min-w-[70px] md:min-w-[80px] group cursor-pointer">
                     <div className="size-14 md:size-16 rounded-full border-2 border-transparent group-hover:border-purple-400 shadow-sm overflow-hidden transition-all duration-300 group-hover:scale-110">
                       <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover bg-white" />
@@ -607,6 +768,18 @@ const NavBar = () => {
           </div>
         </div>
       )}
+      <FriendRequestToast
+      request={incomingRequests[0] || null}
+      onAccept={(id) => {
+        // ⚠️ TEMP: detect if it's friend request or match
+        if (incomingRequests[0]?.roomId) {
+          handleAcceptMatchInvite(id);
+        } else {
+          handleAcceptRequest(id);
+        }
+      }}
+      onDecline={handleDeclineRequest}
+    />
     </>
   );
 };
