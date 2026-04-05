@@ -140,7 +140,25 @@ connectDB();
 let firebaseConfig;
 if (process.env.FIREBASE_CREDENTIALS) {
   // Parse from environment variable (for production like Render)
-  firebaseConfig = JSON.parse(process.env.FIREBASE_CREDENTIALS.replace(/\\n/g, '\n'));
+  // Handle newlines in private key - try multiple approaches
+  let credentialsStr = process.env.FIREBASE_CREDENTIALS;
+  try {
+    // First try parsing directly
+    firebaseConfig = JSON.parse(credentialsStr);
+  } catch (e) {
+    try {
+      // Replace escaped newlines with actual newlines
+      firebaseConfig = JSON.parse(credentialsStr.replace(/\\n/g, '\n'));
+    } catch (e2) {
+      try {
+        // Remove all newlines and try again (for multi-line env vars)
+        firebaseConfig = JSON.parse(credentialsStr.replace(/\n/g, '\\n').replace(/\\n/g, '\n'));
+      } catch (e3) {
+        console.error('Failed to parse FIREBASE_CREDENTIALS:', e3.message);
+        throw new Error('Invalid FIREBASE_CREDENTIALS environment variable. Ensure it is valid JSON.');
+      }
+    }
+  }
 } else {
   // Load from local file (for development)
   firebaseConfig = require("./serviceAccountKey.json");

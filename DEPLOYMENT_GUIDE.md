@@ -74,10 +74,17 @@ In the Render dashboard, go to **Environment** tab and add:
 
 #### How to add FIREBASE_CREDENTIALS:
 
+**Option 1: Minified JSON (Recommended)**
 1. Open your local `auth/backend/serviceAccountKey.json` file
-2. Copy the entire JSON content
-3. Paste it as the value for `FIREBASE_CREDENTIALS` in Render
-4. Make sure to remove any newlines or format it as a single line string
+2. Minify the JSON to a single line (remove all newlines)
+   - You can use an online JSON minifier or run: `cat serviceAccountKey.json | tr -d '\n'`
+3. Copy the entire single-line JSON string
+4. Paste it as the value for `FIREBASE_CREDENTIALS` in Render
+
+**Option 2: Upload as a file**
+Alternatively, you can commit the `serviceAccountKey.json` to your repository (⚠️ **not recommended** for private projects) or use Render's private git service with the file included.
+
+**Important:** The JSON must be valid. The private_key field contains newlines that need to be preserved as `\n` escape sequences in the JSON string.
 
 ### Step 5: Deploy
 
