@@ -103,10 +103,10 @@ Click **"Advanced"** → **"Add Environment Variable"** and add these one by one
 ### 3.1 Update `.env.production`
 
 1. Open `web_frontend/.env.production`
-2. Replace `your-backend-url` with your actual Render backend URL:
+2. Replace the URLs with your actual Render backend URL:
    ```env
-   VITE_API_ORIGIN=https://coders-syndicate-backend-xyz.onrender.com
-   VITE_API_URL=https://coders-syndicate-backend-xyz.onrender.com
+   VITE_API_ORIGIN=https://test-r6kk.onrender.com
+   VITE_API_URL=https://test-r6kk.onrender.com
    ```
 3. Save the file
 
@@ -148,8 +148,8 @@ Click **"Environment Variables"** → **"Add Variable"** and add:
 
 | Key | Value | Environment |
 |-----|-------|-------------|
-| `VITE_API_ORIGIN` | `https://coders-syndicate-backend-xyz.onrender.com` | `Production` ✅ |
-| `VITE_API_URL` | `https://coders-syndicate-backend-xyz.onrender.com` | `Production` ✅ |
+| `VITE_API_ORIGIN` | `https://test-r6kk.onrender.com` | `Production` ✅ |
+| `VITE_API_URL` | `https://test-r6kk.onrender.com` | `Production` ✅ |
 
 **Important:** Make sure to select **"Production"** for the environment, not "Preview" or "Development".
 
